@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>鬼ごっこゲーム</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      text-align: center;
+      font-family: sans-serif;
+    }
+
+    canvas {
+      background: url('鬼ヶ島.jpeg') no-repeat center center;
+      background-size: cover;
+      display: block;
+      margin: 0 auto;
+    }
+
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 24px;
+      color: #333;
+      text-shadow: 1px 1px 1px white;
+    }
+
+    #startButton {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 15px 30px;
+      font-size: 20px;
+      background-color: red;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+      cursor: pointer;
+    }
+
+    #leaderboard {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">スコア: 0</div>
+  <button id="startButton">スタート</button>
+  <div id="leaderboard"></div>
+  <canvas id="gameCanvas" width="1000" height="750"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const playerImg = new Image();
+    playerImg.src = "人間.jpeg";
+
+    const oniImg = new Image();
+    oniImg.src = "鬼.jpg";
+
+    const backgroundImg = new Image();
+    backgroundImg.src = "鬼ヶ島.jpeg";
+
+    let player = { x: 100, y: 100, size: 40, speed: 4 };
+    let oniList = [{ x: 400, y: 300, size: 50, speed: 2 }];
+    let obstacles = [];
+    let score = 0;
+    let gameOver = false;
+    let gameStarted = false;
+    let keys = {};
+    let leaderboard = JSON.parse(localStorage.getItem("leaderboard") || "[]");
+
+    function resetGame() {
+      player.x = 100;
+      player.y = 100;
+      score = 0;
+      gameOver = false;
+      gameStarted = false;
+      oniList = [{ x: 400, y: 300, size: 50, speed: 2 }];
+      obstacles = [];
+      for (let key in keys) keys[key] = false;
+      document.getElementById("score").textContent = "スコア: 0";
+      document.getElementById("startButton").style.display = "block";
+      document.getElementById("leaderboard").style.display = "none";
+      draw(); // 最初の静止画表示
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(playerImg, player.x, player.y, player.size, player.size);
+
+      for (let oni of oniList) {
+        ctx.drawImage(oniImg, oni.x, oni.y, oni.size, oni.size);
+      }
+
+      for (let o of obstacles) {
+        ctx.fillStyle = "red";
+        ctx.fillRect(o.x, o.y, o.width, o.height);
+      }
+    }
+
+    function update() {
+      if (!gameStarted || gameOver) return;
+
+      // プレイヤー移動
+      if (keys["ArrowUp"]) player.y -= player.speed;
+      if (keys["ArrowDown"]) player.y += player.speed;
+      if (keys["ArrowLeft"]) player.x -= player.speed;
+      if (keys["ArrowRight"]) player.x += player.speed;
+
+      // 境界制限
+      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+
+      // 鬼の動き
+      for (let oni of oniList) {
+        const dx = player.x - oni.x;
+        const dy = player.y - oni.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+          oni.x += (dx / dist) * oni.speed;
+          oni.y += (dy / dist) * oni.speed;
+        }
+
+        // 接触判定
+        if (
+          player.x < oni.x + oni.size &&
+          player.x + player.size > oni.x &&
+          player.y < oni.y + oni.size &&
+          player.y + player.size > oni.y
+        ) {
+          endGame();
+          return;
+        }
+      }
+
+      // 障害物との当たり判定
+      for (let o of obstacles) {
+        if (
+          player.x < o.x + o.width &&
+          player.x + player.size > o.x &&
+          player.y < o.y + o.height &&
+          player.y + player.size > o.y
+        ) {
+          endGame();
+          return;
+        }
+      }
+
+      // スコア加算と難易度調整
+      score += 1;
+      document.getElementById("score").textContent = `スコア: ${score}`;
+
+      if (score === 1000) oniList[0].speed += 0.5;
+      if (score === 1500) {
+        obstacles = [
+          { x: 200, y: 200, width: 50, height: 50 },
+          { x: 600, y: 500, width: 50, height: 50 },
+          { x: 300, y: 350, width: 50, height: 50 }
+        ];
+        player.speed = 3;
+      }
+      if (score === 2000) {
+        oniList.push({ x: 100, y: 700, size: 50, speed: 2 });
+      }
+      if (score % 500 === 0 && score > 2000) {
+        for (let oni of oniList) oni.speed += 0.1;
+        obstacles.push({
+          x: Math.random() * (canvas.width - 50),
+          y: Math.random() * (canvas.height - 50),
+          width: 50,
+          height: 50
+        });
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function endGame() {
+      gameOver = true;
+      gameStarted = false;
+      alert("ゲームオーバー！スコア: " + score);
+
+      // ランキング更新
+      const isTop = leaderboard.length < 10 || score > leaderboard[9].score;
+      if (isTop) {
+        const name = prompt("トップ10入り！名前を入力してください：");
+        leaderboard.push({ name, score });
+        leaderboard.sort((a, b) => b.score - a.score);
+        leaderboard = leaderboard.slice(0, 10);
+        localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
+      }
+
+      showLeaderboard();
+    }
+
+    function showLeaderboard() {
+      const board = document.getElementById("leaderboard");
+      board.innerHTML = "<h3>トップ10スコア</h3><ol>" +
+        leaderboard.map(e => `<li>${e.name}：${e.score}</li>`).join("") +
+        "</ol>";
+      board.style.display = "block";
+      document.getElementById("startButton").style.display = "block";
+    }
+
+    // キー操作
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    // スタートボタン
+    document.getElementById("startButton").addEventListener("click", () => {
+      if (!gameStarted) {
+        resetGame();
+        gameStarted = true;
+        document.getElementById("startButton").style.display = "none";
+        requestAnimationFrame(update);
+      }
+    });
+
+    // 最初の画面描画
+    backgroundImg.onload = draw;
+  </script>
+</body>
+</html>
